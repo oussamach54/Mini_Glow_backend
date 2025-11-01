@@ -11,7 +11,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # (Optionnel) variables runtime par défaut
 # Vous pouvez override via docker run -e ou docker compose
-ENV DJANGO_SETTINGS_MODULE=core.settings \
+ENV DJANGO_SETTINGS_MODULE=my_project.settings \
     PORT=8000
 
 # Dépendances système (Pillow, Postgres/psycopg2)
