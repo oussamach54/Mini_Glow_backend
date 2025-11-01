@@ -46,7 +46,7 @@ INSTALLED_APPS = [
     "product",
     "payments",
     "account",
-    "contact",
+    
     "newsletter",
 ]
 
