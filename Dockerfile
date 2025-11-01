@@ -1,32 +1,56 @@
-# Use a slim Python base
-FROM python:3.11-slim
+# =========================
+# Base image (Option A)
+# =========================
+FROM python:3.10-slim
 
+# Env de base
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
 
-# OS deps (build tools + libpq for psycopg2)
+# (Optionnel) variables runtime par défaut
+# Vous pouvez override via docker run -e ou docker compose
+ENV DJANGO_SETTINGS_MODULE=core.settings \
+    PORT=8000
+
+# Dépendances système (Pillow, Postgres/psycopg2)
+# - build-essential + libpq-dev pour compiler les wheels si nécessaire
+# - libjpeg + zlib pour Pillow
+# - curl & netcat-traditional utiles en debug/healthchecks (facultatif)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential libpq-dev curl \
- && rm -rf /var/lib/apt/lists/*
+    build-essential \
+    libpq-dev \
+    libjpeg62-turbo-dev \
+    zlib1g-dev \
+    curl \
+    netcat-traditional \
+  && rm -rf /var/lib/apt/lists/*
 
-# Workdir
+# Répertoire d’app
 WORKDIR /app
 
-# Install Python deps first (better cache)
+# D’abord requirements pour profiter du cache
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy project source
+# Mettre pip/setuptools/wheel à jour puis installer deps
+RUN python -m pip install --upgrade pip setuptools wheel \
+ && pip install -r requirements.txt
+
+# Copier le code
 COPY . /app
 
-# (Optional) show Django version for debug
-RUN python -c "import django,sys; print('Django:', django.get_version())"
+# (Optionnel) créer un utilisateur non-root
+# RUN adduser --disabled-password --gecos '' appuser \
+#  && chown -R appuser:appuser /app
+# USER appuser
 
-# Expose the app port
+# Expose le port (informative)
 EXPOSE 8000
 
-# Entrypoint (runs migrate, collectstatic, then gunicorn)
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+# (Optionnel) collectstatic au build si vos settings le permettent
+# RUN python manage.py collectstatic --noinput
 
-CMD ["/app/entrypoint.sh"]
+# CMD de prod : Gunicorn
+# Adaptez core.wsgi si votre module diffère (ex: config.wsgi)
+CMD ["gunicorn", "core.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "120"]
