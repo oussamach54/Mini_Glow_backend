@@ -1,25 +1,24 @@
-FROM python:3.9-slim
-
+# backend/Dockerfile
+FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=off \
-    PIP_DISABLE_PIP_VERSION_CHECK=on
+    PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y build-essential libpq-dev curl wget && rm -rf /var/lib/apt/lists/*
+# Only runtime libs; no build-essential needed when using psycopg2-binary
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends libpq5 curl wget \
+ && rm -rf /var/lib/apt/lists/*
 
-
+# Install deps
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
+# App code
 COPY . .
 
-ENV DJANGO_SETTINGS_MODULE=my_project.settings
-ENV STATIC_ROOT=/app/staticfiles
-ENV MEDIA_ROOT=/app/media
-
-CMD sh -c "python manage.py migrate --noinput && \
-           python manage.py collectstatic --noinput && \
-           gunicorn my_project.wsgi:application -c gunicorn.conf.py"
+# Expose your Django app on port 8000 via Gunicorn
+# IMPORTANT: change the module below if your WSGI path differs
+CMD ["gunicorn", "my_project.wsgi:application", "--bind", "0.0.0.0:8000"]
