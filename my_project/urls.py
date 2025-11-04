@@ -1,21 +1,26 @@
+# my_project/urls.py
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
 from my_project.health import health
-from account.views import MyTokenObtainPairView   # <— add this import
+from account.views import MyTokenObtainPairView
+from rest_framework_simplejwt.views import TokenRefreshView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
 
-    # JWT token pair (the endpoint your frontend calls)
+    # --- Auth (SimpleJWT) ---
     path('api/token/', MyTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
-    # App routers
-    path('api/', include('product.urls')),
-    path('payments/', include('payments.urls')),
-    path('account/', include('account.urls')),  # still keep /account/login/ etc.
+    # --- Apps (mounted under /api/ so frontend calls /api/...) ---
+    path('api/', include('product.urls')),          # /api/products/...
+    path('api/payments/', include('payments.urls')),# /api/payments/...
+    path('api/account/', include('account.urls')),  # /api/account/...
+
+    # Newsletter as you had it
     path('api/newsletter/', include('newsletter.urls')),
 
     # Health
