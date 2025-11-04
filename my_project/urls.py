@@ -11,19 +11,17 @@ from rest_framework_simplejwt.views import TokenRefreshView
 urlpatterns = [
     path('admin/', admin.site.urls),
 
-    # --- Auth (SimpleJWT) ---
+    # ---- Auth (SimpleJWT) ----
     path('api/token/', MyTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
-    # --- Apps (mounted under /api/ so frontend calls /api/...) ---
-    path('api/', include('product.urls')),          # /api/products/...
-    path('api/payments/', include('payments.urls')),# /api/payments/...
-    path('api/account/', include('account.urls')),  # /api/account/...
-
-    # Newsletter as you had it
+    # ---- App routers (all under /api/...) ----
+    path('api/account/', include('account.urls')),      # -> /api/account/...
+    path('api/payments/', include('payments.urls')),    # -> /api/payments/...
+    path('api/', include('product.urls')),              # -> /api/products/..., etc.
     path('api/newsletter/', include('newsletter.urls')),
 
-    # Health
+    # ---- Health ----
     path('health/', health),
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
