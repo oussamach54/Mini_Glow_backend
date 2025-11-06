@@ -2,15 +2,14 @@ from django.urls import path
 from product import views
 
 urlpatterns = [
-    # list/detail
+   
+    # create/update/delete
     path("products/", views.ProductsList.as_view(), name="products-list"),
     path("product/<int:pk>/", views.ProductDetailView.as_view(), name="product-details"),
-
-    # create/update/delete
-    path("product-create/", views.ProductCreateView.as_view(), name="product-create"),          # legacy
-    path("products/create/", views.ProductCreateView.as_view(), name="product-create-alt"),     # ✅ new alias
+    path("product-create/", views.ProductCreateView.as_view(), name="product-create"),
     path("product-update/<int:pk>/", views.ProductEditView.as_view(), name="product-update"),
     path("product-delete/<int:pk>/", views.ProductDeleteView.as_view(), name="product-delete"),
+
 
     # wishlist
     path("wishlist/", views.WishlistListCreateView.as_view(), name="wishlist-list-create"),
