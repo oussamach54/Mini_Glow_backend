@@ -460,3 +460,4 @@ class CreateCODOrderView(APIView):
         else:
             data["whatsapp_url"] = ""
         return Response(data, status=status.HTTP_201_CREATED)
+
