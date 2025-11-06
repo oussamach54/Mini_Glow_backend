@@ -10,42 +10,21 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 
 class ProductSerializer(serializers.ModelSerializer):
     variants = ProductVariantSerializer(many=True, read_only=True)
-
-    # Expose promo fields (computed on the model)
+    # expose promo fields so the UI can show promo only on the biggest variant
     promo_variant_id = serializers.ReadOnlyField()
     promo_variant_old_price = serializers.ReadOnlyField()
     promo_variant_new_price = serializers.ReadOnlyField()
 
-    # New: absolute URL for image
-    image_url = serializers.SerializerMethodField()
-
     class Meta:
         model = Product
         fields = [
-            "id",
-            "name",
-            "description",
-            "price",
-            "new_price",
-            "stock",
-            "image",        # relative (/images/xxx.jpg)
-            "image_url",    # absolute (https://api.../images/xxx.jpg)
-            "category",
-            "brand",
-            "has_discount",
-            "discount_percent",
-            "promo_variant_id",
-            "promo_variant_old_price",
-            "promo_variant_new_price",
+            "id", "name", "description",
+            "price", "new_price",
+            "stock", "image", "category", "brand",
+            "has_discount", "discount_percent",
+            "promo_variant_id", "promo_variant_old_price", "promo_variant_new_price",
             "variants",
         ]
-
-    def get_image_url(self, obj):
-        request = self.context.get("request")
-        if obj.image and hasattr(obj.image, "url"):
-            url = obj.image.url
-            return request.build_absolute_uri(url) if request else url
-        return None
 
 
 class WishlistItemSerializer(serializers.ModelSerializer):
