@@ -1,30 +1,32 @@
-# my_project/urls.py
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-
 from my_project.health import health
-from account.views import MyTokenObtainPairView
-from rest_framework_simplejwt.views import TokenRefreshView
+
+# ✅ SimpleJWT views
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+    TokenVerifyView,
+)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
 
-    # --- Auth (SimpleJWT) ---
-    path('api/token/', MyTokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-
-    # --- Apps (mounted under /api/ so frontend calls /api/...) ---
-    path('api/', include('product.urls')),          # /api/products/...
-    path('api/payments/', include('payments.urls')),# /api/payments/...
-    path('api/account/', include('account.urls')),  # /api/account/...
-
-    # Newsletter as you had it
+    # Your existing apps
+    path('api/', include('product.urls')),
+    path('payments/', include('payments.urls')),
+    path('account/', include('account.urls')),
     path('api/newsletter/', include('newsletter.urls')),
-
-    # Health
     path('health/', health),
-] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
+    # ✅ Add the standard SimpleJWT endpoints at /api/token/*
+    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
+]
+
+# Static & media (dev and simple deployments)
+urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
