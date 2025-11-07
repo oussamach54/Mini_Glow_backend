@@ -130,7 +130,7 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # All uploads live here, e.g. static/images/products/xxx.jpg
 MEDIA_URL = "/images/"
-MEDIA_ROOT = BASE_DIR / "static" / "images"
+MEDIA_ROOT = BASE_DIR / "media"   # <— change from static/images to media
 
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
