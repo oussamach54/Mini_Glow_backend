@@ -1,3 +1,4 @@
+# backend/product/views.py
 import json
 from decimal import Decimal, InvalidOperation
 
@@ -16,7 +17,7 @@ from .serializers import (
     ShippingRateSerializer,
 )
 
-# ---------- helpers ----------
+# ---------------- helpers ----------------
 
 def _to_dec(v):
     """Parse '40,00' or '40.00' → Decimal; None if empty/invalid."""
@@ -49,7 +50,8 @@ class ProductsList(APIView):
         if search:
             qs = qs.filter(Q(name__icontains=search) | Q(description__icontains=search))
 
-        return Response(ProductSerializer(qs, many=True).data, status=200)
+        data = ProductSerializer(qs, many=True, context={"request": request}).data
+        return Response(data, status=200)
 
 
 class ProductDetailView(APIView):
@@ -57,7 +59,8 @@ class ProductDetailView(APIView):
 
     def get(self, request, pk):
         product = get_object_or_404(Product, id=pk)
-        return Response(ProductSerializer(product).data, status=200)
+        data = ProductSerializer(product, context={"request": request}).data
+        return Response(data, status=200)
 
 
 class ProductCreateView(APIView):
@@ -78,7 +81,7 @@ class ProductCreateView(APIView):
             "category": (data.get("category") or "other").lower(),
         }
 
-        ser = ProductSerializer(data=payload)
+        ser = ProductSerializer(data=payload, context={"request": request})
         if not ser.is_valid():
             return Response({"detail": ser.errors}, status=400)
 
@@ -110,7 +113,8 @@ class ProductCreateView(APIView):
             except Exception:
                 pass
 
-        return Response(ProductSerializer(product).data, status=201)
+        out = ProductSerializer(product, context={"request": request}).data
+        return Response(out, status=201)
 
 
 class ProductEditView(APIView):
@@ -142,7 +146,7 @@ class ProductEditView(APIView):
         if image_file is not None:
             payload["image"] = image_file
 
-        ser = ProductSerializer(instance=product, data=payload, partial=True)
+        ser = ProductSerializer(instance=product, data=payload, partial=True, context={"request": request})
         if not ser.is_valid():
             return Response({"detail": ser.errors}, status=400)
 
@@ -174,7 +178,8 @@ class ProductEditView(APIView):
             except Exception:
                 pass
 
-        return Response(ProductSerializer(product).data, status=200)
+        out = ProductSerializer(product, context={"request": request}).data
+        return Response(out, status=200)
 
 
 class ProductDeleteView(APIView):
@@ -186,26 +191,27 @@ class ProductDeleteView(APIView):
         return Response({"detail": "Product successfully deleted."}, status=204)
 
 
-# ======================= WISHLIST / SHIPPING / BRANDS (unchanged) =======================
+# ======================= WISHLIST / SHIPPING / BRANDS =======================
 
 class WishlistListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
         qs = WishlistItem.objects.filter(user=request.user).select_related("product")
-        ser = WishlistItemSerializer(qs, many=True)
+        ser = WishlistItemSerializer(qs, many=True, context={"request": request})
         return Response(ser.data, status=200)
 
     def post(self, request):
         payload = request.data.copy()
+        payload["product_id"] = payload.get("product") or payload.get("product_id")
         payload["user"] = request.user.id
-        serializer = WishlistItemSerializer(data=payload)
+        serializer = WishlistItemSerializer(data=payload, context={"request": request})
         if serializer.is_valid():
             obj, created = WishlistItem.objects.get_or_create(
                 user=request.user,
                 product=serializer.validated_data["product"],
             )
-            out = WishlistItemSerializer(obj).data
+            out = WishlistItemSerializer(obj, context={"request": request}).data
             return Response(out, status=201 if created else 200)
         return Response({"detail": serializer.errors}, status=400)
 
