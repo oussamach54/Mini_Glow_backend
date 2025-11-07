@@ -1,4 +1,3 @@
-# my_project/urls.py
 from django.contrib import admin
 from django.urls import path, include, re_path
 from django.conf import settings
@@ -24,11 +23,9 @@ urlpatterns = [
 
     path('health/', health),
 
-    # ------------ MEDIA (uploads) ALWAYS ON ------------
-    # This makes /images/... map to MEDIA_ROOT even when DEBUG=False (Coolify)
+    # ---- MEDIA (uploads) ALWAYS ON ----
+    # Map /images/... -> MEDIA_ROOT (works also when DEBUG=False)
     re_path(r'^images/(?P<path>.*)$',
             static_serve, {'document_root': settings.MEDIA_ROOT}, name='media'),
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
-
-# (debug helper for static won't run in prod; media already handled above)
 
