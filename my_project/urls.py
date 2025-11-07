@@ -1,34 +1,34 @@
 # my_project/urls.py
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.static import serve as static_serve
+
 from my_project.health import health
-from rest_framework_simplejwt.views import TokenRefreshView, TokenVerifyView
+from account.views import MyTokenObtainPairView
+from rest_framework_simplejwt.views import TokenRefreshView
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
+    path('admin/', admin.site.urls),
 
-    # products under /api/
-    path("api/", include("product.urls")),
+    # JWT
+    path('api/token/', MyTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
-    # account exposed under both (so frontend deploys with/without /api work)
-    path("account/", include("account.urls")),
-    path("api/account/", include("account.urls")),
+    # APIs
+    path('api/', include('product.urls')),
+    path('api/payments/', include('payments.urls')),
+    path('api/account/', include('account.urls')),
+    path('api/newsletter/', include('newsletter.urls')),
 
-    # payments under both as well
-    path("payments/", include("payments.urls")),
-    path("api/payments/", include("payments.urls")),
+    path('health/', health),
 
-    # optional newsletter
-    path("api/newsletter/", include("newsletter.urls")),
-
-    # health
-    path("health/", health),
-
-    # keep SimpleJWT refresh/verify if you need them
-    path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
-    path("api/token/verify/", TokenVerifyView.as_view(), name="token_verify"),
+    # ------------ MEDIA (uploads) ALWAYS ON ------------
+    # This makes /images/... map to MEDIA_ROOT even when DEBUG=False (Coolify)
+    re_path(r'^images/(?P<path>.*)$',
+            static_serve, {'document_root': settings.MEDIA_ROOT}, name='media'),
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
-urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# (debug helper for static won't run in prod; media already handled above)
+
