@@ -23,9 +23,15 @@ urlpatterns = [
 
     path('health/', health),
 
-    # ---- MEDIA (uploads) ALWAYS ON ----
-    # Map /images/... -> MEDIA_ROOT (works also when DEBUG=False)
-    re_path(r'^images/(?P<path>.*)$',
-            static_serve, {'document_root': settings.MEDIA_ROOT}, name='media'),
-] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+] urlpatterns += [
+    re_path(
+        r"^images/(?P<path>.+)$",
+        static_serve,
+        {"document_root": settings.MEDIA_ROOT, "show_indexes": False},
+        name="media",
+    ),
+]
+
+# ---- STATIC (only useful for dev; prod should be via WhiteNoise/Nginx) ----
+urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
