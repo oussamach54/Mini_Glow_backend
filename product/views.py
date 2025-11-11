@@ -16,6 +16,10 @@ from .serializers import (
     WishlistItemSerializer,
     ShippingRateSerializer,
 )
+# at top
+from django.db.models import Q, CharField
+from django.db.models.functions import Cast
+
 
 # ---------------- helpers ----------------
 
@@ -62,7 +66,12 @@ class ProductsList(APIView):
         # category filter (?type= or ?category=)
         slug = (request.query_params.get("type") or request.query_params.get("category") or "").lower().strip()
         if slug:
-            qs = qs.filter(Q(category=slug) | Q(categories__contains=[slug]))
+            # DB-agnostic: cast JSON to text and search for '"slug"' token
+            qs = qs.annotate(_cats_str=Cast("categories", CharField()))
+            qs = qs.filter(
+                Q(category=slug) |
+                Q(_cats_str__icontains=f'"{slug}"')  # finds the JSON token safely
+            )
 
         # brand filter (exact)
         brand = request.query_params.get("brand")
@@ -75,6 +84,7 @@ class ProductsList(APIView):
 
         data = ProductSerializer(qs, many=True, context={"request": request}).data
         return Response(data, status=200)
+
 
 class ProductDetailView(APIView):
     permission_classes = [permissions.AllowAny]
@@ -316,3 +326,4 @@ class BrandsListView(APIView):
         )
         sorted_brands = sorted(brands, key=lambda s: s.casefold())
         return Response(sorted_brands, status=200)
+
