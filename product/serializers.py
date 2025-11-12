@@ -1,4 +1,3 @@
-# backend/product/serializers.py
 from rest_framework import serializers
 from .models import Product, ProductVariant, WishlistItem, ShippingRate
 
@@ -11,46 +10,21 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 
 class ProductSerializer(serializers.ModelSerializer):
     variants = ProductVariantSerializer(many=True, read_only=True)
-
-    # computed/promo helpers
+    # expose promo fields so the UI can show promo only on the biggest variant
     promo_variant_id = serializers.ReadOnlyField()
     promo_variant_old_price = serializers.ReadOnlyField()
     promo_variant_new_price = serializers.ReadOnlyField()
 
-    # absolute URL for image
-    image_url = serializers.SerializerMethodField()
-
     class Meta:
         model = Product
         fields = [
-            "id",
-            "name",
-            "description",
-            "price",
-            "new_price",
-            "stock",
-            "image",
-            "image_url",
-            "brand",
-            # legacy single category + new multi
-            "category",
-            "categories",
-            # promo/computed
-            "has_discount",
-            "discount_percent",
-            "promo_variant_id",
-            "promo_variant_old_price",
-            "promo_variant_new_price",
-            # nested
+            "id", "name", "description",
+            "price", "new_price",
+            "stock", "image", "category", "brand",
+            "has_discount", "discount_percent",
+            "promo_variant_id", "promo_variant_old_price", "promo_variant_new_price",
             "variants",
         ]
-
-    def get_image_url(self, obj):
-        if not obj.image:
-            return None
-        request = self.context.get("request")
-        url = obj.image.url
-        return request.build_absolute_uri(url) if request else url
 
 
 class WishlistItemSerializer(serializers.ModelSerializer):
@@ -69,3 +43,4 @@ class ShippingRateSerializer(serializers.ModelSerializer):
         model = ShippingRate
         fields = ["id", "city", "price", "active", "created_at"]
         read_only_fields = ["id", "created_at"]
+
