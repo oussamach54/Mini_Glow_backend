@@ -2,6 +2,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from django.db import models
 from django.conf import settings
 
+
 class Product(models.Model):
     class Category(models.TextChoices):
         FACE = "face", "Face"
@@ -9,28 +10,23 @@ class Product(models.Model):
         EYES = "eyes", "Eyes"
         EYEBROW = "eyebrow", "Eyebrow"
         HAIR = "hair", "Hair"
-        # NEW
-        BODY = "body", "Corps"
-        PACKS = "packs", "Packs"
-        ACNE = "acne", "Acné"
-        HYPER_PIGMENTATION = "hyper_pigmentation", "Hyper pigmentation"
-        BRIGHTENING = "brightening", "Éclaircissement"
-        DRY_SKIN = "dry_skin", "Peau sèche"
-        COMBINATION_OILY = "combination_oily", "Peau mixte/grasse"
         OTHER = "other", "Other"
 
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
+
+    # Base price (original)
     price = models.DecimalField(max_digits=8, decimal_places=2)
+
+    # Promo price (optional). If set and < price ⇒ discount active
     new_price = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+
     stock = models.BooleanField(default=False)
     image = models.ImageField(upload_to="products/", null=True, blank=True)
 
-    # legacy single category (kept for compatibility)
-    category = models.CharField(max_length=32, choices=Category.choices, default=Category.OTHER, db_index=True)
-    # NEW: multi-categories as a JSON list of slugs
-    categories = models.JSONField(default=list, blank=True)
-
+    category = models.CharField(
+        max_length=20, choices=Category.choices, default=Category.OTHER, db_index=True
+    )
     brand = models.CharField(max_length=120, blank=True, default="", db_index=True)
 
     @property
@@ -49,7 +45,12 @@ class Product(models.Model):
                 return 0
         return 0
 
+    # ----- variant-promo helpers (promo applies ONLY to biggest variant) -----
     def _biggest_variant(self):
+        """
+        Biggest = max(size_ml) if any size set, otherwise most expensive.
+        Returns a ProductVariant or None.
+        """
         vs = list(self.variants.all())
         if not vs:
             return None
@@ -60,6 +61,7 @@ class Product(models.Model):
 
     @property
     def promo_variant(self):
+        """Return the variant that should carry the promo (or None)."""
         if not self.has_discount:
             return None
         return self._biggest_variant()
@@ -71,11 +73,15 @@ class Product(models.Model):
 
     @property
     def promo_variant_new_price(self):
+        """
+        The discounted price for the promo variant (rounded to 0.01).
+        """
         v = self.promo_variant
         if not v:
             return None
         pct = Decimal(self.discount_percent) / Decimal(100)
-        return (Decimal(v.price) * (Decimal(1) - pct)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        newp = (Decimal(v.price) * (Decimal(1) - pct)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        return newp
 
     @property
     def promo_variant_old_price(self):
@@ -88,7 +94,7 @@ class Product(models.Model):
 
 class ProductVariant(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="variants")
-    label = models.CharField(max_length=80)
+    label = models.CharField(max_length=80)  # e.g. "500 ml"
     size_ml = models.PositiveIntegerField(null=True, blank=True)
     price = models.DecimalField(max_digits=8, decimal_places=2)
     in_stock = models.BooleanField(default=True)
@@ -103,8 +109,12 @@ class ProductVariant(models.Model):
 
 
 class WishlistItem(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="wishlist_items")
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="wishlisted_by")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="wishlist_items"
+    )
+    product = models.ForeignKey(
+        Product, on_delete=models.CASCADE, related_name="wishlisted_by"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -117,7 +127,7 @@ class WishlistItem(models.Model):
 
 class ShippingRate(models.Model):
     city = models.CharField(max_length=120, unique=True, db_index=True)
-    price = models.DecimalField(max_digits=6, decimal_places=2)
+    price = models.DecimalField(max_digits=6, decimal_places=2)  # DH
     active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
