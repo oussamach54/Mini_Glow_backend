@@ -348,17 +348,31 @@ class BrandsListView(APIView):
 
 
 class OrdersCreateView(APIView):
-    # require login; change to AllowAny if you want guest checkout
-    permission_classes = [permissions.IsAuthenticated]
+    # ✅ allow guest checkout
+    permission_classes = [permissions.AllowAny]
 
     def post(self, request):
         serializer = OrderCreateSerializer(
             data=request.data, context={"request": request}
         )
-        if serializer.is_valid():
+        if not serializer.is_valid():
+            return Response({"detail": serializer.errors}, status=400)
+
+        # wrap save() so product/variant errors become 400 instead of 500
+        try:
             order = serializer.save()
-            return Response(OrderDetailSerializer(order).data, status=201)
-        return Response({"detail": serializer.errors}, status=400)
+        except Product.DoesNotExist:
+            return Response(
+                {"detail": "Produit introuvable dans la commande."},
+                status=400,
+            )
+        except ProductVariant.DoesNotExist:
+            return Response(
+                {"detail": "Variante de produit introuvable dans la commande."},
+                status=400,
+            )
+
+        return Response(OrderDetailSerializer(order).data, status=201)
 
 
 class MyOrdersListView(APIView):
