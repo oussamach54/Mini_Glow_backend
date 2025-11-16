@@ -35,6 +35,8 @@ class Product(models.Model):
         default=Category.OTHER,
         db_index=True,
     )
+        # ✅ NEW: multi-category tags (list of slugs)
+    categories = models.JSONField(default=list, blank=True)
     brand = models.CharField(max_length=120, blank=True, default="", db_index=True)
 
     @property
