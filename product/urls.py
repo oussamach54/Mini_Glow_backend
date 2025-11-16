@@ -1,7 +1,8 @@
 from django.urls import path
 from product import views
 from .views import (
-    OrdersCreateView, MyOrdersListView, OrderDetailView, OrderStatusAdminView,
+    OrdersCreateView, MyOrdersListView, OrderDetailView, OrderStatusAdminView,AdminOrdersListView,
+    AdminOrderDetailView,
 
 )
 
@@ -30,8 +31,10 @@ urlpatterns = [
     # brands
     path("brands/", views.BrandsListView.as_view(), name="brands-list"),
 
-     path("orders/", OrdersCreateView.as_view()),
-    path("orders/my/", MyOrdersListView.as_view()),
-    path("orders/<int:pk>/", OrderDetailView.as_view()),
-    path("orders/<int:pk>/status/", OrderStatusAdminView.as_view()),
+    path("orders/", OrdersCreateView.as_view(), name="orders-create"),              # POST create
+    path("orders/my/", MyOrdersListView.as_view(), name="orders-my"),              # GET my orders
+    path("orders/<int:pk>/", OrderDetailView.as_view(), name="orders-detail"),     # GET detail (owner/admin)
+    path("orders/<int:pk>/status/", OrderStatusAdminView.as_view(), name="orders-status"),  # PATCH status (admin)
+    path("orders/admin/", AdminOrdersListView.as_view(), name="orders-admin-list"),          # GET all (admin)
+    path("orders/admin/<int:pk>/", AdminOrderDetailView.as_view(), name="orders-admin-detail"),
 ]

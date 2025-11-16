@@ -343,3 +343,29 @@ class OrderStatusAdminView(APIView):
         order.status = status_new
         order.save()
         return Response(OrderDetailSerializer(order).data, status=200)
+
+# ✅ NEW: admin list + admin detail
+class AdminOrdersListView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        qs = Order.objects.all().order_by("-created_at")
+        status_param = request.query_params.get("status")
+        if status_param:
+            qs = qs.filter(status=status_param)
+        data = OrderDetailSerializer(qs, many=True).data
+        return Response(data, status=200)
+
+
+class AdminOrderDetailView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request, pk):
+        order = get_object_or_404(Order, pk=pk)
+        return Response(OrderDetailSerializer(order).data, status=200)
+
+    def delete(self, request, pk):
+        """Delete an order (admin only)."""
+        order = get_object_or_404(Order, pk=pk)
+        order.delete()
+        return Response(status=204)

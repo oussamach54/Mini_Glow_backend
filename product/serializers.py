@@ -48,6 +48,7 @@ class ShippingRateSerializer(serializers.ModelSerializer):
 
 
 from .models import  Order, OrderItem
+from decimal import Decimal, ROUND_HALF_UP
 
 class OrderItemWriteSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
@@ -61,7 +62,7 @@ class OrderCreateSerializer(serializers.ModelSerializer):
         model  = Order
         fields = [
             "id", "full_name", "email", "phone", "city", "address", "notes",
-            "payment_method", "items",
+            "payment_method", "shipping_price", "items",   # ✅ added shipping_price
         ]
 
     def validate_items(self, value):
@@ -82,16 +83,23 @@ class OrderCreateSerializer(serializers.ModelSerializer):
         user  = self.context["request"].user if self.context and self.context.get("request") else None
         items = validated.pop("items", [])
 
-        # shipping by active city rate (case-insensitive)
-        city = validated.get("city", "")
-        rate = ShippingRate.objects.filter(active=True, city__iexact=city).first()
-        shipping_price = rate.price if rate else 0
+        # ✅ shipping_price: try payload first, fallback to city rate
+        raw_shipping = validated.pop("shipping_price", None)
+        if raw_shipping not in (None, ""):
+            try:
+                shipping_price = Decimal(str(raw_shipping))
+            except Exception:
+                shipping_price = Decimal("0.00")
+        else:
+            city = validated.get("city", "")
+            rate = ShippingRate.objects.filter(active=True, city__iexact=city).first()
+            shipping_price = rate.price if rate else Decimal("0.00")
 
         order = Order.objects.create(
             user=user if user and user.is_authenticated else None,
             shipping_price=shipping_price,
-            items_total=0,
-            grand_total=0,
+            items_total=Decimal("0.00"),
+            grand_total=Decimal("0.00"),
             **validated,
         )
 
@@ -123,6 +131,7 @@ class OrderCreateSerializer(serializers.ModelSerializer):
         order.grand_total = (order.items_total + Decimal(order.shipping_price)).quantize(Decimal("0.01"))
         order.save()
         return order
+
 
 
 class OrderItemReadSerializer(serializers.ModelSerializer):
