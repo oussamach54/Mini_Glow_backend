@@ -316,3 +316,80 @@ class BrandsListView(APIView):
         )
         sorted_brands = sorted(brands, key=lambda s: s.casefold())
         return Response(sorted_brands, status=200)
+
+
+
+
+from django.shortcuts import get_object_or_404
+
+from .models import Order
+from .serializers import OrderCreateSerializer, OrderDetailSerializer
+
+class OrdersCreateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]  # require login; change to AllowAny if you want guest checkout
+
+    def post(self, request):
+        serializer = OrderCreateSerializer(data=request.data, context={"request": request})
+        if serializer.is_valid():
+            order = serializer.save()
+            return Response(OrderDetailSerializer(order).data, status=201)
+        return Response({"detail": serializer.errors}, status=400)
+
+
+class MyOrdersListView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        qs = Order.objects.filter(user=request.user).order_by("-created_at")
+        data = OrderDetailSerializer(qs, many=True).data
+        return Response(data, status=200)
+
+
+class OrderDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk):
+        order = get_object_or_404(Order, pk=pk)
+        if not (request.user.is_staff or request.user.is_superuser or (order.user_id == request.user.id)):
+            return Response({"detail": "Not allowed."}, status=403)
+        return Response(OrderDetailSerializer(order).data, status=200)
+
+
+class OrderStatusAdminView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def patch(self, request, pk):
+        order = get_object_or_404(Order, pk=pk)
+        status_new = request.data.get("status")
+        valid = [c[0] for c in Order.Status.choices]
+        if status_new not in valid:
+            return Response({"detail": f"Invalid status. Allowed: {valid}"}, status=400)
+        order.status = status_new
+        order.save()
+        return Response(OrderDetailSerializer(order).data, status=200)
+
+# ✅ NEW: admin list + admin detail
+class AdminOrdersListView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        qs = Order.objects.all().order_by("-created_at")
+        status_param = request.query_params.get("status")
+        if status_param:
+            qs = qs.filter(status=status_param)
+        data = OrderDetailSerializer(qs, many=True).data
+        return Response(data, status=200)
+
+
+class AdminOrderDetailView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request, pk):
+        order = get_object_or_404(Order, pk=pk)
+        return Response(OrderDetailSerializer(order).data, status=200)
+
+    def delete(self, request, pk):
+        """Delete an order (admin only)."""
+        order = get_object_or_404(Order, pk=pk)
+        order.delete()
+        return Response(status=204)
