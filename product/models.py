@@ -143,3 +143,58 @@ class ShippingRate(models.Model):
     def __str__(self):
         return f"{self.city} — {self.price} DH"
 
+class Order(models.Model):
+    class Status(models.TextChoices):
+        PENDING   = "pending", "En attente"
+        PAID      = "paid", "Payée"
+        SHIPPED   = "shipped", "Expédiée"
+        DELIVERED = "delivered", "Livrée"
+        CANCELED  = "canceled", "Annulée"
+
+    class PaymentMethod(models.TextChoices):
+        COD  = "cod", "Paiement à la livraison"
+        CARD = "card", "Carte/En ligne"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="orders"
+    )
+
+    # snapshot of who/where to ship
+    full_name = models.CharField(max_length=120)
+    email     = models.EmailField(blank=True, default="")
+    phone     = models.CharField(max_length=32)
+    city      = models.CharField(max_length=120)
+    address   = models.CharField(max_length=255)
+    notes     = models.TextField(blank=True, default="")
+
+    payment_method = models.CharField(max_length=10, choices=PaymentMethod.choices, default=PaymentMethod.COD)
+    status         = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
+
+    # money snapshots
+    shipping_price = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal("0.00"))
+    items_total    = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    grand_total    = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Order #{self.id} — {self.full_name} — {self.status}"
+
+
+class OrderItem(models.Model):
+    order   = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
+    product = models.ForeignKey("product.Product", on_delete=models.SET_NULL, null=True, blank=True)
+    variant = models.ForeignKey("product.ProductVariant", on_delete=models.SET_NULL, null=True, blank=True)
+
+    # snapshots for resilience
+    name          = models.CharField(max_length=200)
+    variant_label = models.CharField(max_length=80, blank=True, default="")
+    unit_price    = models.DecimalField(max_digits=10, decimal_places=2)
+    quantity      = models.PositiveIntegerField(default=1)
+    line_total    = models.DecimalField(max_digits=10, decimal_places=2)
+
+    def __str__(self):
+        return f"{self.name} x{self.quantity} ({self.unit_price})"
