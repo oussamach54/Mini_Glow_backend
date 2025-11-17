@@ -3,6 +3,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from django.db import models
 from django.conf import settings
 
+
 class Product(models.Model):
     class Category(models.TextChoices):
         # existing
@@ -13,7 +14,7 @@ class Product(models.Model):
         HAIR = "hair", "Cheveux"
         OTHER = "other", "Other"
 
-        # NEW additions (single select still)
+        # NEW additions
         BODY = "body", "Corps"
         PACKS = "packs", "Packs"
         ACNE = "acne", "Acné"
@@ -24,19 +25,28 @@ class Product(models.Model):
 
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
+
+    # Base price (original)
     price = models.DecimalField(max_digits=8, decimal_places=2)
+
+    # Promo price (optional). If set and < price ⇒ discount active
     new_price = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+
     stock = models.BooleanField(default=False)
     image = models.ImageField(upload_to="products/", null=True, blank=True)
 
+    # Primary category (used for filters/tabs)
     category = models.CharField(
         max_length=30,  # keep >= longest slug ("hyper_pigmentation" length 19; 30 is safe)
         choices=Category.choices,
         default=Category.OTHER,
         db_index=True,
     )
-        # ✅ NEW: multi-category tags (list of slugs)
+
+    # ✅ NEW: multi-category tags (list of slugs)
+    # e.g. ["face", "acne", "brightening"]
     categories = models.JSONField(default=list, blank=True)
+
     brand = models.CharField(max_length=120, blank=True, default="", db_index=True)
 
     @property
@@ -55,6 +65,7 @@ class Product(models.Model):
                 return 0
         return 0
 
+    # ----- variant-promo helpers (promo applies ONLY to biggest variant) -----
     def _biggest_variant(self):
         vs = list(self.variants.all())
         if not vs:
@@ -81,7 +92,10 @@ class Product(models.Model):
         if not v:
             return None
         pct = Decimal(self.discount_percent) / Decimal(100)
-        return (Decimal(v.price) * (Decimal(1) - pct)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        newp = (Decimal(v.price) * (Decimal(1) - pct)).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        return newp
 
     @property
     def promo_variant_old_price(self):
@@ -94,7 +108,7 @@ class Product(models.Model):
 
 class ProductVariant(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="variants")
-    label = models.CharField(max_length=80)
+    label = models.CharField(max_length=80)  # e.g. "500 ml"
     size_ml = models.PositiveIntegerField(null=True, blank=True)
     price = models.DecimalField(max_digits=8, decimal_places=2)
     in_stock = models.BooleanField(default=True)
@@ -109,8 +123,16 @@ class ProductVariant(models.Model):
 
 
 class WishlistItem(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="wishlist_items")
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="wishlisted_by")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="wishlist_items",
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="wishlisted_by",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -123,7 +145,7 @@ class WishlistItem(models.Model):
 
 class ShippingRate(models.Model):
     city = models.CharField(max_length=120, unique=True, db_index=True)
-    price = models.DecimalField(max_digits=6, decimal_places=2)
+    price = models.DecimalField(max_digits=6, decimal_places=2)  # DH
     active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -133,37 +155,62 @@ class ShippingRate(models.Model):
     def __str__(self):
         return f"{self.city} — {self.price} DH"
 
+
 class Order(models.Model):
     class Status(models.TextChoices):
-        PENDING   = "pending", "En attente"
-        PAID      = "paid", "Payée"
-        SHIPPED   = "shipped", "Expédiée"
+        PENDING = "pending", "En attente"
+        PAID = "paid", "Payée"
+        SHIPPED = "shipped", "Expédiée"
         DELIVERED = "delivered", "Livrée"
-        CANCELED  = "canceled", "Annulée"
+        CANCELED = "canceled", "Annulée"
 
     class PaymentMethod(models.TextChoices):
-        COD  = "cod", "Paiement à la livraison"
+        COD = "cod", "Paiement à la livraison"
         CARD = "card", "Carte/En ligne"
 
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="orders"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="orders",
     )
 
     # snapshot of who/where to ship
     full_name = models.CharField(max_length=120)
-    email     = models.EmailField(blank=True, default="")
-    phone     = models.CharField(max_length=32)
-    city      = models.CharField(max_length=120)
-    address   = models.CharField(max_length=255)
-    notes     = models.TextField(blank=True, default="")
+    email = models.EmailField(blank=True, default="")
+    phone = models.CharField(max_length=32)
+    city = models.CharField(max_length=120)
+    address = models.CharField(max_length=255)
+    notes = models.TextField(blank=True, default="")
 
-    payment_method = models.CharField(max_length=10, choices=PaymentMethod.choices, default=PaymentMethod.COD)
-    status         = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
+    payment_method = models.CharField(
+        max_length=10,
+        choices=PaymentMethod.choices,
+        default=PaymentMethod.COD,
+    )
+    status = models.CharField(
+        max_length=12,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
 
     # money snapshots
-    shipping_price = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal("0.00"))
-    items_total    = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
-    grand_total    = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    shipping_price = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=Decimal("0.00"),
+    )
+    items_total = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+    )
+    grand_total = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -175,16 +222,27 @@ class Order(models.Model):
 
 
 class OrderItem(models.Model):
-    order   = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
-    product = models.ForeignKey("product.Product", on_delete=models.SET_NULL, null=True, blank=True)
-    variant = models.ForeignKey("product.ProductVariant", on_delete=models.SET_NULL, null=True, blank=True)
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
+    product = models.ForeignKey(
+        "product.Product",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    variant = models.ForeignKey(
+        "product.ProductVariant",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
 
     # snapshots for resilience
-    name          = models.CharField(max_length=200)
+    name = models.CharField(max_length=200)
     variant_label = models.CharField(max_length=80, blank=True, default="")
-    unit_price    = models.DecimalField(max_digits=10, decimal_places=2)
-    quantity      = models.PositiveIntegerField(default=1)
-    line_total    = models.DecimalField(max_digits=10, decimal_places=2)
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    quantity = models.PositiveIntegerField(default=1)
+    line_total = models.DecimalField(max_digits=10, decimal_places=2)
 
     def __str__(self):
+        # this is my code
         return f"{self.name} x{self.quantity} ({self.unit_price})"
