@@ -22,12 +22,10 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 class ProductSerializer(serializers.ModelSerializer):
     variants = ProductVariantSerializer(many=True, read_only=True)
 
-    # computed/promo helpers
     promo_variant_id = serializers.ReadOnlyField()
     promo_variant_old_price = serializers.ReadOnlyField()
     promo_variant_new_price = serializers.ReadOnlyField()
 
-    # absolute URL for image
     image_url = serializers.SerializerMethodField()
 
     class Meta:
@@ -42,8 +40,9 @@ class ProductSerializer(serializers.ModelSerializer):
             "image",
             "image_url",
             "brand",
-            # single category only
+            # ✅ single + multi categories
             "category",
+            "categories",
             # promo/computed
             "has_discount",
             "discount_percent",
@@ -113,7 +112,6 @@ class OrderCreateSerializer(serializers.ModelSerializer):
         return value
 
     def _unit_price_for(self, product, variant):
-        # promo logic mirrors your Product helpers
         if variant:
             if (
                 product.has_discount
@@ -130,7 +128,6 @@ class OrderCreateSerializer(serializers.ModelSerializer):
         user = request.user if request and getattr(request, "user", None) else None
         items = validated.pop("items", [])
 
-        # shipping_price: try payload first, fallback to city rate
         raw_shipping = validated.pop("shipping_price", None)
         if raw_shipping not in (None, ""):
             try:
@@ -138,10 +135,10 @@ class OrderCreateSerializer(serializers.ModelSerializer):
             except Exception:
                 shipping_price = Decimal("0.00")
         else:
+            from .models import ShippingRate  # local import to avoid cycles
+
             city = validated.get("city", "")
-            rate = ShippingRate.objects.filter(
-                active=True, city__iexact=city
-            ).first()
+            rate = ShippingRate.objects.filter(active=True, city__iexact=city).first()
             shipping_price = rate.price if rate else Decimal("0.00")
 
         order = Order.objects.create(
@@ -153,6 +150,8 @@ class OrderCreateSerializer(serializers.ModelSerializer):
         )
 
         items_total = Decimal("0.00")
+        from .models import Product, ProductVariant  # local to avoid circular import
+
         for item in items:
             pid = item["product_id"]
             vid = item.get("variant_id")
@@ -160,9 +159,7 @@ class OrderCreateSerializer(serializers.ModelSerializer):
 
             product = Product.objects.get(id=pid)
             variant = (
-                ProductVariant.objects.get(id=vid, product=product)
-                if vid
-                else None
+                ProductVariant.objects.get(id=vid, product=product) if vid else None
             )
 
             unit_price = Decimal(self._unit_price_for(product, variant))

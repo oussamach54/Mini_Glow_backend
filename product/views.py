@@ -39,6 +39,32 @@ def _to_dec(v):
         return None
 
 
+def _to_list(v):
+    """
+    Accepts JSON string '["face","acne"]', CSV 'face,acne', or list.
+    Returns a cleaned list of unique slugs (lowercase).
+    """
+    if v in (None, "", []):
+        return []
+    if isinstance(v, str):
+        try:
+            parsed = json.loads(v)
+            if isinstance(parsed, list):
+                v = parsed
+            else:
+                v = [x.strip() for x in v.split(",")]
+        except Exception:
+            v = [x.strip() for x in v.split(",")]
+    if isinstance(v, (list, tuple)):
+        out = []
+        for x in v:
+            s = (str(x or "")).strip().lower()
+            if s and s not in out:
+                out.append(s)
+        return out
+    return []
+
+
 # ======================= PRODUCTS =======================
 
 
@@ -48,14 +74,14 @@ class ProductsList(APIView):
     def get(self, request):
         qs = Product.objects.all().order_by("-id")
 
-        # category filter (?type= or ?category=) – now SINGLE category only
+        # ✅ category filter: matches primary + multi categories
         slug = (
             request.query_params.get("type")
             or request.query_params.get("category")
             or ""
         ).lower().strip()
         if slug:
-            qs = qs.filter(category=slug)
+            qs = qs.filter(Q(category=slug) | Q(categories__contains=[slug]))
 
         # brand filter (exact)
         brand = request.query_params.get("brand")
@@ -89,6 +115,10 @@ class ProductCreateView(APIView):
     def post(self, request):
         data = request.data
 
+        # ✅ multi categories
+        cats = _to_list(data.get("categories"))
+        primary = (data.get("category") or (cats[0] if cats else "other")).lower()
+
         payload = {
             "name": data.get("name"),
             "brand": data.get("brand", ""),
@@ -97,8 +127,8 @@ class ProductCreateView(APIView):
             "new_price": _to_dec(data.get("new_price")),
             "stock": data.get("stock"),
             "image": request.FILES.get("image"),
-            # single category only; default "other"
-            "category": (data.get("category") or "other").lower(),
+            "category": primary,
+            "categories": cats,
         }
 
         ser = ProductSerializer(data=payload, context={"request": request})
@@ -135,7 +165,6 @@ class ProductCreateView(APIView):
                 if to_create:
                     ProductVariant.objects.bulk_create(to_create)
             except Exception:
-                # if variants are malformed, ignore them
                 pass
 
         out = ProductSerializer(product, context={"request": request}).data
@@ -153,6 +182,15 @@ class ProductEditView(APIView):
         new_base = _to_dec(data.get("price"))
         new_promo = _to_dec(data.get("new_price"))
 
+        # ✅ multi categories (keep old if none sent)
+        cats = _to_list(data.get("categories"))
+        if cats:
+            primary = (data.get("category") or cats[0]).lower()
+            categories_value = cats
+        else:
+            primary = (data.get("category") or product.category or "other").lower()
+            categories_value = product.categories
+
         payload = {
             "name": data.get("name", product.name),
             "brand": data.get("brand", product.brand),
@@ -160,9 +198,8 @@ class ProductEditView(APIView):
             "price": new_base if new_base is not None else product.price,
             "new_price": new_promo,
             "stock": data.get("stock", product.stock),
-            "category": (
-                data.get("category", product.category) or "other"
-            ).lower(),
+            "category": primary,
+            "categories": categories_value,
         }
 
         image_file = request.FILES.get("image")
@@ -180,7 +217,6 @@ class ProductEditView(APIView):
 
         product = ser.save()
 
-        # Replace variants if provided
         if "variants" in data:
             ProductVariant.objects.filter(product=product).delete()
             raw = data.get("variants")
@@ -239,17 +275,13 @@ class WishlistListCreateView(APIView):
         payload = request.data.copy()
         payload["product_id"] = payload.get("product") or payload.get("product_id")
         payload["user"] = request.user.id
-        serializer = WishlistItemSerializer(
-            data=payload, context={"request": request}
-        )
+        serializer = WishlistItemSerializer(data=payload, context={"request": request})
         if serializer.is_valid():
             obj, created = WishlistItem.objects.get_or_create(
                 user=request.user,
                 product=serializer.validated_data["product"],
             )
-            out = WishlistItemSerializer(
-                obj, context={"request": request}
-            ).data
+            out = WishlistItemSerializer(obj, context={"request": request}).data
             return Response(out, status=201 if created else 200)
         return Response({"detail": serializer.errors}, status=400)
 
@@ -271,9 +303,7 @@ class WishlistToggleView(APIView):
         if not pid:
             return Response({"detail": "product_id required"}, status=400)
         product = get_object_or_404(Product, id=pid)
-        obj, created = WishlistItem.objects.get_or_create(
-            user=request.user, product=product
-        )
+        obj, created = WishlistItem.objects.get_or_create(user=request.user, product=product)
         if not created:
             obj.delete()
             state = "removed"
@@ -348,7 +378,7 @@ class BrandsListView(APIView):
 
 
 class OrdersCreateView(APIView):
-    # ✅ allow guest checkout
+    # allow guest checkout
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
@@ -358,13 +388,11 @@ class OrdersCreateView(APIView):
         if not serializer.is_valid():
             return Response({"detail": serializer.errors}, status=400)
 
-        # wrap save() so product/variant errors become 400 instead of 500
         try:
             order = serializer.save()
         except Product.DoesNotExist:
             return Response(
-                {"detail": "Produit introuvable dans la commande."},
-                status=400,
+                {"detail": "Produit introuvable dans la commande."}, status=400
             )
         except ProductVariant.DoesNotExist:
             return Response(
@@ -434,7 +462,6 @@ class AdminOrderDetailView(APIView):
         return Response(OrderDetailSerializer(order).data, status=200)
 
     def delete(self, request, pk):
-        """Delete an order (admin only)."""
         order = get_object_or_404(Order, pk=pk)
         order.delete()
         return Response(status=204)
