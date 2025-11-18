@@ -43,11 +43,14 @@ class Product(models.Model):
         db_index=True,
     )
 
-    # ✅ NEW: multi-category tags (list of slugs)
+    # ✅ multi-category tags (list of slugs)
     # e.g. ["face", "acne", "brightening"]
     categories = models.JSONField(default=list, blank=True)
 
     brand = models.CharField(max_length=120, blank=True, default="", db_index=True)
+
+    # ⭐ NEW: favoris admin
+    is_favorite = models.BooleanField(default=False, db_index=True)
 
     @property
     def has_discount(self):

@@ -74,29 +74,37 @@ class ProductsList(APIView):
     def get(self, request):
         qs = Product.objects.all().order_by("-id")
 
-        # ✅ category filter: matches primary + multi categories
+        # ... tes filtres existants (category, brand, search) ...
+
+        # category filter
         slug = (
             request.query_params.get("type")
             or request.query_params.get("category")
             or ""
         ).lower().strip()
         if slug:
-            qs = qs.filter(Q(category=slug) | Q(categories__contains=[slug]))
+            qs = qs.filter(category=slug)
 
-        # brand filter (exact)
         brand = request.query_params.get("brand")
         if brand:
             qs = qs.filter(brand__iexact=brand)
 
-        # search filter (name + description)
         search = request.query_params.get("search")
         if search:
             qs = qs.filter(
                 Q(name__icontains=search) | Q(description__icontains=search)
             )
 
+        # ⭐ NEW: ?favorite=1 pour ne prendre que les favoris
+        fav = request.query_params.get("favorite")
+        if fav is not None:
+            s = str(fav).strip().lower()
+            if s in ("1", "true", "yes", "on"):
+                qs = qs.filter(is_favorite=True)
+
         data = ProductSerializer(qs, many=True, context={"request": request}).data
         return Response(data, status=200)
+
 
 
 class ProductDetailView(APIView):
@@ -129,6 +137,7 @@ class ProductCreateView(APIView):
             "image": request.FILES.get("image"),
             "category": primary,
             "categories": cats,
+            "is_favorite": data.get("is_favorite", False),  # ⭐ AJOUT
         }
 
         ser = ProductSerializer(data=payload, context={"request": request})
@@ -200,6 +209,7 @@ class ProductEditView(APIView):
             "stock": data.get("stock", product.stock),
             "category": primary,
             "categories": categories_value,
+            "is_favorite": data.get("is_favorite", product.is_favorite),  # ⭐ AJOUT
         }
 
         image_file = request.FILES.get("image")

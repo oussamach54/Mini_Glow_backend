@@ -43,6 +43,7 @@ class ProductSerializer(serializers.ModelSerializer):
             # ✅ single + multi categories
             "category",
             "categories",
+            "is_favorite",
             # promo/computed
             "has_discount",
             "discount_percent",
