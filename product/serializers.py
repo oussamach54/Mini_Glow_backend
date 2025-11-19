@@ -125,10 +125,17 @@ class OrderCreateSerializer(serializers.ModelSerializer):
             return product.new_price if product.has_discount else product.price
 
     def create(self, validated):
+        """
+        Crée la commande, en vérifiant d'abord que
+        - le produit existe
+        - la variante existe (si fournie)
+        - PRODUIT et VARIANTE sont en stock
+        """
         request = self.context.get("request")
         user = request.user if request and getattr(request, "user", None) else None
         items = validated.pop("items", [])
 
+        # ----- shipping -----
         raw_shipping = validated.pop("shipping_price", None)
         if raw_shipping not in (None, ""):
             try:
@@ -142,6 +149,52 @@ class OrderCreateSerializer(serializers.ModelSerializer):
             rate = ShippingRate.objects.filter(active=True, city__iexact=city).first()
             shipping_price = rate.price if rate else Decimal("0.00")
 
+        # ----- vérifier les stocks AVANT de créer l'Order -----
+        validated_items = []
+        for item in items:
+            pid = item["product_id"]
+            vid = item.get("variant_id")
+            qty = item["quantity"]
+
+            try:
+                product = Product.objects.get(id=pid)
+            except Product.DoesNotExist:
+                raise serializers.ValidationError(
+                    {"detail": f"Produit avec id={pid} introuvable."}
+                )
+
+            variant = None
+            if vid is not None:
+                try:
+                    variant = ProductVariant.objects.get(id=vid, product=product)
+                except ProductVariant.DoesNotExist:
+                    raise serializers.ValidationError(
+                        {
+                            "detail": (
+                                f"Variante sélectionnée introuvable pour le produit "
+                                f"« {product.name} »."
+                            )
+                        }
+                    )
+
+            # 🔒 Vérification stock produit / variante
+            if not product.stock:
+                raise serializers.ValidationError(
+                    {"detail": f"Le produit « {product.name} » est en rupture de stock."}
+                )
+            if variant is not None and not variant.in_stock:
+                raise serializers.ValidationError(
+                    {
+                        "detail": (
+                            f"La variante « {variant.label} » du produit "
+                            f"« {product.name} » est en rupture de stock."
+                        )
+                    }
+                )
+
+            validated_items.append((product, variant, qty))
+
+        # ----- création Order + OrderItem(s) -----
         order = Order.objects.create(
             user=user if user and user.is_authenticated else None,
             shipping_price=shipping_price,
@@ -151,18 +204,8 @@ class OrderCreateSerializer(serializers.ModelSerializer):
         )
 
         items_total = Decimal("0.00")
-        from .models import Product, ProductVariant  # local to avoid circular import
 
-        for item in items:
-            pid = item["product_id"]
-            vid = item.get("variant_id")
-            qty = item["quantity"]
-
-            product = Product.objects.get(id=pid)
-            variant = (
-                ProductVariant.objects.get(id=vid, product=product) if vid else None
-            )
-
+        for product, variant, qty in validated_items:
             unit_price = Decimal(self._unit_price_for(product, variant))
             line_total = (unit_price * qty).quantize(
                 Decimal("0.01"), rounding=ROUND_HALF_UP
